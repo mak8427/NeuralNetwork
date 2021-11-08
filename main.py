@@ -1,8 +1,29 @@
+import nnfs
 import numpy as np
 import matplotlib.pyplot as plt
+from nnfs.datasets import spiral_data
+nnfs.init()
+np.random.seed(0)
 
-inputs=[1,2,3,4]
-weights=[6,8,2,-3]
-bias=2
-output=inputs[0]*weights[0]+inputs[1]*weights[1]+inputs[2]*weights[2]+inputs[3]*weights[3]+bias
-print(output)
+X,y= spiral_data(100,3)
+
+
+class Layer_Dense:
+    def __init__(self,n_inputs,n_neurons):
+        self.weights=0.10*np.random.randn(n_inputs,n_neurons)
+        self.biases=np.zeros((1,n_neurons))
+    def foward(self,inputs):
+        self.output=np.dot(inputs,self.weights)+self.biases
+class Activation_ReLU:
+    def foward(self,inputs):
+        self.output=np.maximum(0,inputs)
+layer1=Layer_Dense(2,5)
+layer1.foward(X)
+activation1=Activation_ReLU()
+layer1.foward(X)
+activation1.foward(layer1.output)
+print(activation1.output)
+
+
+inputs=[0,2,-1,3.3,-2.7,1.1,2.2,100]
+
