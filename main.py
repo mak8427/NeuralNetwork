@@ -1,6 +1,8 @@
 import numpy as np
 import nnfs
 from nnfs.datasets import spiral_data
+import pandas as pd
+import time
 
 nnfs.init()
 
@@ -148,63 +150,101 @@ class Activation_Softmax_Loss_CategoricalCrossentropy ():
        self.dinputs[range(samples), y_true] -= 1
        # Normalize gradient
        self.dinputs = self.dinputs / samples
+#Optimizer
+class Optimizer_SGD:
+    def __init__(self,learning_rate=1.0,decay=0.,momentum=0):
+        self.learning_rate = learning_rate
+        self.current_lerning_rate=learning_rate
+        self.decay=decay
+        self.iterations=0
+        self.momentum=momentum
+    def pre_update_paramns(self):
+        if self.decay:
+           self.current_lerning_rate=self.learning_rate/(1.+self.decay*self.iterations)
+    def update_params(self,layer):
+        if self.momentum:
+            if not hasattr(layer,'weight_momentums'):
+                layer.weight_momentums=np.zeros_like(layer.weights)
+                layer.bias_momentums=np.zeros_like(layer.biases)
+            weight_updates=layer.weight_momentums*self.momentum-self.current_lerning_rate*layer.dweights
+            layer.weight_momentums = weight_updates
+
+            bias_updates=layer.bias_momentums*self.momentum-self.current_lerning_rate*layer.dbiases
+            layer.bias_momentums = bias_updates
+        else:
+            bias_updates = -self.current_lerning_rate* layer.dbiases
+            weight_updates = -self.current_lerning_rate* layer.dweights
+        layer.weights += weight_updates
+        layer.biases += bias_updates
+
+
+    def post_update_paramns(self):
+        self.iterations+=1
 
 
 # Create dataset
 X, y = spiral_data( samples = 100 , classes = 3 )
 
 # Create Dense layer with 2 input features and 3 output values
-dense1 = Layer_Dense( 2 , 3 )
+dense1 = Layer_Dense( 2 , 64 )
 
 # Create ReLU activation (to be used with Dense layer):
 activation1 = Activation_ReLU()
 
 # Create second Dense layer with 3 input features (as we take output
 # of previous layer here) and 3 output values (output values)
-dense2 = Layer_Dense( 3 , 3 )
+dense2 = Layer_Dense( 64 , 3 )
 
 # Create Softmax classifier's combined loss and activation
 loss_activation = Activation_Softmax_Loss_CategoricalCrossentropy()
 
-# Perform a forward pass of our training data through this layer
-dense1.forward(X)
+#oprimizer
+optimizer = Optimizer_SGD( decay = 1e-3 ,momentum=0.9)
 
-# Perform a forward pass through activation function
-# takes the output of first dense layer here
-activation1.forward(dense1.output)
+data=pd.DataFrame(columns=['epoch','accuracy','loss'])
+for epoch in range(0,10000):
+     start_time = time.time()
+    # Perform a forward pass of our training data through this layer
+     dense1.forward(X)
 
-# Perform a forward pass through second Dense layer
-# takes outputs of activation function of first layer as inputs
-dense2.forward(activation1.output)
+     # Perform a forward pass through activation function
+     # takes the output of first dense layer here
+     activation1.forward(dense1.output)
 
-# Perform a forward pass through the activation/loss function
-# takes the output of second dense layer here and returns loss
-loss = loss_activation.forward(dense2.output, y)
+     # Perform a forward pass through second Dense layer
+     # takes outputs of activation function of first layer as inputs
+     dense2.forward(activation1.output)
 
-# Let's see output of the first few samples:
-print (loss_activation.output[: 5 ])
+     # Perform a forward pass through the activation/loss function
+     # takes the output of second dense layer here and returns loss
+     loss = loss_activation.forward(dense2.output, y)
 
-# Print loss value
-print ( 'loss:' , loss)
+     # Calculate accuracy from output of activation2 and targets
+     # calculate values along first axis
+     predictions = np.argmax(loss_activation.output, axis = 1 )
+     if len (y.shape) == 2 :
+        y = np.argmax(y, axis = 1 )
+     accuracy = np.mean(predictions == y)
 
-# Calculate accuracy from output of activation2 and targets
-# calculate values along first axis
-predictions = np.argmax(loss_activation.output, axis = 1 )
-if len (y.shape) == 2 :
-   y = np.argmax(y, axis = 1 )
-accuracy = np.mean(predictions == y)
+     # Print accuracy
+     if not epoch % 100:
+         print(str(epoch)+'  '+ str(accuracy)+ '  '+ str(loss)+'  '+str(optimizer.current_lerning_rate))
+     data.loc[len(data)]=[epoch,accuracy,loss]
 
-# Print accuracy
-print ( 'acc:' , accuracy)
 
-# Backward pass
-loss_activation.backward(loss_activation.output, y)
-dense2.backward(loss_activation.dinputs)
-activation1.backward(dense2.dinputs)
-dense1.backward(activation1.dinputs)
+     # Backward pass
+     loss_activation.backward(loss_activation.output, y)
+     dense2.backward(loss_activation.dinputs)
+     activation1.backward(dense2.dinputs)
+     dense1.backward(activation1.dinputs)
 
-# Print gradients
-print (dense1.dweights)
-print (dense1.dbiases)
-print (dense2.dweights)
-print (dense2.dbiases)
+     optimizer.pre_update_paramns()
+     optimizer.update_params(dense1)
+     optimizer.update_params(dense2)
+     optimizer.post_update_paramns()
+     end_time = time.time()
+     total_time = end_time - start_time
+     if not epoch % 100:
+         print(total_time)
+
+data.to_csv('data_decay.csv')
